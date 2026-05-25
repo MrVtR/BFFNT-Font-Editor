@@ -10,6 +10,22 @@ This is a graphical editor for Nintendo 3DS .bffnt and .ffnu font files. It was 
 ### Pixel Editor
 ![Pixel Editor](images/pixel_ui.png)
 
+## In-Game Comparison
+
+Below is a side-by-side comparison of the game's text rendering before and after custom glyph modification and character mapping adjustments:
+
+<table>
+  <tr>
+    <td align="center"><b>Before</b></td>
+    <td align="center"><b>After</b></td>
+  </tr>
+  <tr>
+    <td><img src="images/before_edit.jpg" width="100%"></td>
+    <td><img src="images/after_edit.png" width="100%"></td>
+  </tr>
+</table>
+
+
 ## Features
 
 * **BFFNT Parser & Packer**: Reads and writes Nintendo 3DS font files. Handles endianness automatically, updates section offsets, and adjusts file size fields on saving.
@@ -61,12 +77,12 @@ This is a graphical editor for Nintendo 3DS .bffnt and .ffnu font files. It was 
 
 ## Requirements and Usage
 
-You only need Python 3 and the Pillow library to run this.
+You need Python 3 and the dependencies listed in `requirements.txt` (Pillow and tkinterdnd2) to run this.
 
 ### Installation
-Install Pillow if you don't have it:
+Install the required dependencies using pip:
 ```bash
-pip install Pillow
+pip install -r requirements.txt
 ```
 
 ### Running the tool
@@ -74,7 +90,11 @@ Run the script using python:
 ```bash
 python bffnt_editor.py
 ```
-You can also double click the .py file to open it.
+
+You can also drag and drop a .bffnt file onto the script window, or pass it directly as a command-line argument:
+```bash
+python bffnt_editor.py "C:\path\to\your\file.bffnt"
+```
 
 ## Tips and Info
 * **Adding Characters**: When mapping a new symbol like "Ç" or "ã", click Add (<kbd>Ctrl</kbd> + <kbd>D</kbd>) and input the letter directly or its Unicode format (like U+00C7).

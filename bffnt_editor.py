@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
+from tkinterdnd2 import DND_FILES, TkinterDnD
 import struct
 import math
 import os
@@ -2233,107 +2234,15 @@ class BFFNTApp:
 
     def setup_drag_and_drop(self):
         try:
-            import ctypes
-            from ctypes import wintypes
-            
-            GWL_WNDPROC = -4
-            WM_DROPFILES = 0x0233
-            
-            LRESULT = ctypes.c_ssize_t
-            self.WNDPROC_TYPE = ctypes.WINFUNCTYPE(LRESULT, wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM)
-            
-            if ctypes.sizeof(ctypes.c_void_p) == 8:
-                self.SetWindowLong = ctypes.windll.user32.SetWindowLongPtrW
-                self.SetWindowLong.restype = ctypes.c_void_p
-                self.SetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
-                
-                self.GetWindowLong = ctypes.windll.user32.GetWindowLongPtrW
-                self.GetWindowLong.restype = ctypes.c_void_p
-                self.GetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int]
-            else:
-                self.SetWindowLong = ctypes.windll.user32.SetWindowLongW
-                self.SetWindowLong.restype = ctypes.c_void_p
-                self.SetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_void_p]
-                
-                self.GetWindowLong = ctypes.windll.user32.GetWindowLongW
-                self.GetWindowLong.restype = ctypes.c_void_p
-                self.GetWindowLong.argtypes = [wintypes.HWND, ctypes.c_int]
-                
-            self.CallWindowProc = ctypes.windll.user32.CallWindowProcW
-            self.CallWindowProc.restype = LRESULT
-            self.CallWindowProc.argtypes = [ctypes.c_void_p, wintypes.HWND, ctypes.c_uint, wintypes.WPARAM, wintypes.LPARAM]
-            
-            self.DragAcceptFiles = ctypes.windll.shell32.DragAcceptFiles
-            self.DragAcceptFiles.argtypes = [wintypes.HWND, wintypes.BOOL]
-            self.DragAcceptFiles.restype = None
-            
-            self.DragQueryFile = ctypes.windll.shell32.DragQueryFileW
-            self.DragQueryFile.argtypes = [ctypes.c_void_p, ctypes.c_uint, ctypes.c_wchar_p, ctypes.c_uint]
-            self.DragQueryFile.restype = ctypes.c_uint
-            
-            self.DragFinish = ctypes.windll.shell32.DragFinish
-            self.DragFinish.argtypes = [ctypes.c_void_p]
-            self.DragFinish.restype = None
-            
-            # Allow WM_DROPFILES and WM_COPYGLOBALDATA messages through UIPI message filter (for elevated/admin privileges)
-            try:
-                ctypes.windll.user32.ChangeWindowMessageFilter(0x0233, 1) # WM_DROPFILES
-                ctypes.windll.user32.ChangeWindowMessageFilter(0x0049, 1) # WM_COPYGLOBALDATA
-            except AttributeError:
-                pass
-            
-            # Subclass storage
-            self.old_wndproc = None
-            self.new_wndproc = self.WNDPROC_TYPE(self.wndproc)
-            
-            # Wait for all widgets to be drawn so we can retrieve their real HWNDs
-            self.root.update_idletasks()
-            
-            # Subclass ONLY the root/main window
-            root_hwnd = self.root.winfo_id()
-            self.DragAcceptFiles(root_hwnd, True)
-            self.old_wndproc = self.GetWindowLong(root_hwnd, GWL_WNDPROC)
-            self.SetWindowLong(root_hwnd, GWL_WNDPROC, self.new_wndproc)
-            
-            # Recursively enable drag/drop for all child widgets, but do NOT subclass them
-            self.register_drag_accept(self.root)
+            self.root.drop_target_register(DND_FILES)
+            self.root.dnd_bind('<<Drop>>', self.on_drop_event)
         except Exception as e:
-            print("Failed to initialize native drag and drop:", e)
+            print("Failed to initialize drag and drop:", e)
             
-    def register_drag_accept(self, widget):
-        try:
-            hwnd = widget.winfo_id()
-            self.DragAcceptFiles(hwnd, True)
-        except Exception:
-            pass
-            
-        # Recursively walk Tcl/Tk children
-        for child in widget.winfo_children():
-            self.register_drag_accept(child)
-            
-    def wndproc(self, hwnd, msg, wp, lp):
-        WM_DROPFILES = 0x0233
-        import ctypes
-        if msg == WM_DROPFILES:
-            hDrop = wp
-            num_files = self.DragQueryFile(hDrop, 0xFFFFFFFF, None, 0)
-            files = []
-            for i in range(num_files):
-                length = self.DragQueryFile(hDrop, i, None, 0)
-                buf = ctypes.create_unicode_buffer(length + 1)
-                self.DragQueryFile(hDrop, i, buf, length + 1)
-                files.append(buf.value)
-            
-            self.DragFinish(hDrop)
-            
-            if files:
-                self.root.after(0, lambda: self.on_files_dropped(files))
-            return 0
-            
-        if self.old_wndproc:
-            return self.CallWindowProc(self.old_wndproc, hwnd, msg, wp, lp)
-        return 0
-            
+    def on_drop_event(self, event):
+        files = self.root.tk.splitlist(event.data)
+        self.on_files_dropped(files)
+        
     def on_files_dropped(self, files):
         if not files:
             return
@@ -2360,7 +2269,11 @@ class BFFNTApp:
             self.load_bffnt_file(filepath)
 
 def main():
-    root = tk.Tk()
+    try:
+        root = TkinterDnD.Tk()
+    except Exception as e:
+        print("tkinterdnd2 failed to initialize. Falling back to normal tk.Tk(). Error:", e)
+        root = tk.Tk()
     app = BFFNTApp(root)
     
     # If a file is passed as command-line argument, open it automatically
@@ -2370,6 +2283,7 @@ def main():
             app.load_bffnt_file(path)
             
     root.protocol("WM_DELETE_WINDOW", app.on_exit)
+    
     root.mainloop()
 
 if __name__ == '__main__':
