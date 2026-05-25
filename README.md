@@ -1,6 +1,6 @@
 # BFFNT Font Editor
 
-This is a graphical editor for Nintendo 3DS .bffnt and .ffnu font files. It was originally created for the Brazilian Portuguese translation project of *Mario & Luigi: Bowser's Inside Story + Bowser Jr.'s Journey*, but it should work with any BFFNT file made for the 3DS. The editor allows you to modify glyph textures, adjust spacing metrics, edit character mappings, and manage texture sheets.
+This is a graphical editor for Nintendo 3DS .bffnt font files. It was originally created for the Brazilian Portuguese translation project of *Mario & Luigi: Bowser's Inside Story + Bowser Jr.'s Journey*, but it should work with any BFFNT file made for the 3DS. The editor allows you to modify glyph textures, adjust spacing metrics, edit character mappings, and manage texture sheets.
 
 ## Screenshots
 
