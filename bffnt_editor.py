@@ -647,7 +647,16 @@ class Bffnt:
     def add_mapping(self, char, glyph_idx):
         self.remove_mapping(char)
         
-        # Look for SCAN mapping
+        # 1. First, check if the character falls within any existing TABLE cmap section range.
+        # If it does, we MUST map it in that TABLE section, otherwise the 0xFFFF entry in the
+        # TABLE section will block the game from ever reading the SCAN mapping.
+        for cmap in self.cmap_sections:
+            if cmap['type'] == MAPPING_TABLE:
+                if cmap['start'] <= ord(char) <= cmap['end']:
+                    cmap['indexTable'][ord(char) - cmap['start']] = glyph_idx
+                    return True
+                    
+        # 2. If it is not in range of any existing TABLE section, map it in the SCAN mapping
         for cmap in self.cmap_sections:
             if cmap['type'] == MAPPING_SCAN:
                 cmap['entries'][char] = glyph_idx
@@ -655,12 +664,6 @@ class Bffnt:
                 cmap['end'] = max(cmap['end'], ord(char))
                 return True
                 
-        # Look for TABLE mapping
-        for cmap in self.cmap_sections:
-            if cmap['type'] == MAPPING_TABLE:
-                if cmap['start'] <= ord(char) <= cmap['end']:
-                    cmap['indexTable'][ord(char) - cmap['start']] = glyph_idx
-                    return True
         return False
 
     def remove_mapping(self, char):
@@ -1163,20 +1166,43 @@ class BFFNTApp:
         style.configure("Treeview.Heading", background="#2d2d30", foreground=self.fg_light, borderwidth=1, font=("Segoe UI", 10, "bold"))
         style.map("Treeview.Heading", background=[("active", "#3e3e42")])
 
+        # Combobox styling (style background to match dark background color)
+        style.configure("TCombobox", background=self.bg_dark, fieldbackground=self.bg_dark, foreground=self.fg_light, bordercolor=self.border_color, arrowcolor=self.fg_light)
+        style.map("TCombobox", 
+                  fieldbackground=[("readonly", self.bg_dark), ("active", self.bg_dark), ("disabled", self.bg_dark)], 
+                  background=[("readonly", self.bg_dark), ("active", self.bg_dark), ("disabled", self.bg_dark)],
+                  foreground=[("disabled", self.fg_dim)],
+                  arrowcolor=[("disabled", self.fg_dim)])
+        self.root.option_add("*TCombobox*Listbox.background", self.bg_dark)
+        self.root.option_add("*TCombobox*Listbox.foreground", self.fg_light)
+        self.root.option_add("*TCombobox*Listbox.selectBackground", self.bg_selected)
+
     def create_widgets(self):
         # Create Menu
         menubar = tk.Menu(self.root, bg=self.bg_card, fg=self.fg_light, activebackground=self.bg_selected)
         filemenu = tk.Menu(menubar, tearoff=0, bg=self.bg_card, fg=self.fg_light, activebackground=self.bg_selected)
         filemenu.add_command(label="Open BFFNT...", command=self.on_open, accelerator="Ctrl+O")
         filemenu.add_command(label="Save", command=self.on_save, accelerator="Ctrl+S")
-        filemenu.add_command(label="Save As...", command=self.on_save_as)
+        filemenu.add_command(label="Save As...", command=self.on_save_as, accelerator="Ctrl+Shift+S")
         filemenu.add_separator()
         filemenu.add_command(label="Exit", command=self.on_exit)
         menubar.add_cascade(label="File", menu=filemenu)
         self.root.config(menu=menubar)
 
-        self.root.bind("<Control-o>", lambda e: self.on_open())
-        self.root.bind("<Control-s>", lambda e: self.on_save())
+        self.root.bind("<Control-o>", self.on_open)
+        self.root.bind("<Control-s>", self.on_save)
+        self.root.bind("<Control-Shift-S>", self.on_save_as)
+        self.root.bind("<Control-Shift-s>", self.on_save_as)
+        self.root.bind("<Control-d>", self.add_mapping_ui)
+        self.root.bind("<Control-f>", self.remove_mapping_ui)
+        self.root.bind("<Control-l>", self.export_glyph_png)
+        self.root.bind("<Control-m>", self.import_glyph_png)
+        self.root.bind("<Control-Return>", self.apply_glyph_metrics)
+        self.root.bind("<Control-e>", self.export_sheet)
+        self.root.bind("<Control-r>", self.import_sheet)
+        self.root.bind("<Control-q>", self.add_new_sheet)
+        self.root.bind("<Control-w>", self.remove_last_sheet)
+        self.root.bind("<Control-k>", self.open_pixel_editor)
 
         # Main Layout: 2 Panels (Left Sidebar + Right Editor)
         main_paned = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
@@ -1231,15 +1257,15 @@ class BFFNTApp:
         # Import / Export Sheet Buttons
         sheet_btns = ttk.Frame(left_content, style='Panel.TFrame')
         sheet_btns.pack(fill=tk.X, pady=(0, 5))
-        self.btn_export_sheet = ttk.Button(sheet_btns, text="Export Sheet...", state="disabled", command=self.export_sheet)
+        self.btn_export_sheet = ttk.Button(sheet_btns, text="Export Sheet... (Ctrl+E)", state="disabled", command=self.export_sheet)
         self.btn_export_sheet.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
-        self.btn_import_sheet = ttk.Button(sheet_btns, text="Import Sheet...", state="disabled", command=self.import_sheet)
+        self.btn_import_sheet = ttk.Button(sheet_btns, text="Import Sheet... (Ctrl+R)", state="disabled", command=self.import_sheet)
         self.btn_import_sheet.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
 
-        self.btn_add_sheet = ttk.Button(left_content, text="➕ Add New Sheet", state="disabled", command=self.add_new_sheet)
+        self.btn_add_sheet = ttk.Button(left_content, text="➕ Add New Sheet (Ctrl+Q)", state="disabled", command=self.add_new_sheet)
         self.btn_add_sheet.pack(fill=tk.X, pady=(5, 2))
 
-        self.btn_remove_sheet = ttk.Button(left_content, text="➖ Remove Last Sheet", state="disabled", command=self.remove_last_sheet)
+        self.btn_remove_sheet = ttk.Button(left_content, text="➖ Remove Last Sheet (Ctrl+W)", state="disabled", command=self.remove_last_sheet)
         self.btn_remove_sheet.pack(fill=tk.X, pady=(2, 5))
 
 
@@ -1303,7 +1329,7 @@ class BFFNTApp:
         self.preview_canvas.pack(fill=tk.BOTH, expand=True)
         self.preview_canvas.bind("<Double-Button-1>", lambda e: self.open_pixel_editor())
 
-        self.btn_edit_pixels = ttk.Button(col1_frame, text="✏️ Edit Pixels", command=self.open_pixel_editor, state="disabled")
+        self.btn_edit_pixels = ttk.Button(col1_frame, text="✏️ Edit Pixels (Ctrl+K)", command=self.open_pixel_editor, state="disabled")
         self.btn_edit_pixels.pack(fill=tk.X, pady=(5, 0), ipady=2)
 
         # Col 2: Metric Sliders & Spinboxes
@@ -1332,7 +1358,7 @@ class BFFNTApp:
         self.spin_char.bind("<KeyRelease>", lambda e: self.on_slider_spin_change())
 
         # Save Metrics Button
-        self.btn_apply_metrics = ttk.Button(sliders_frame, text="Apply Metric Changes", style='Accent.TButton', command=self.apply_glyph_metrics, state="disabled")
+        self.btn_apply_metrics = ttk.Button(sliders_frame, text="Apply Metric Changes (Ctrl+Enter)", style='Accent.TButton', command=self.apply_glyph_metrics, state="disabled")
         self.btn_apply_metrics.pack(anchor=tk.W, ipady=3, ipadx=10)
 
         # Col 3: Glyph Actions & Mappings
@@ -1344,10 +1370,10 @@ class BFFNTApp:
         io_btn_frame = ttk.Frame(ops_frame, style='Panel.TFrame')
         io_btn_frame.pack(fill=tk.X, pady=(0, 10))
         
-        self.btn_export_glyph = ttk.Button(io_btn_frame, text="Export Glyph PNG...", command=self.export_glyph_png, state="disabled")
+        self.btn_export_glyph = ttk.Button(io_btn_frame, text="Export Glyph PNG... (Ctrl+L)", command=self.export_glyph_png, state="disabled")
         self.btn_export_glyph.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         
-        self.btn_import_glyph = ttk.Button(io_btn_frame, text="Import Glyph PNG...", command=self.import_glyph_png, state="disabled")
+        self.btn_import_glyph = ttk.Button(io_btn_frame, text="Import Glyph PNG... (Ctrl+M)", command=self.import_glyph_png, state="disabled")
         self.btn_import_glyph.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
 
         ttk.Label(ops_frame, text="Character Mappings", style='Panel.TLabel', font=('Segoe UI', 10, 'bold')).pack(anchor=tk.W, pady=(5, 2))
@@ -1367,10 +1393,10 @@ class BFFNTApp:
         map_btn_frame = ttk.Frame(ops_frame, style='Panel.TFrame')
         map_btn_frame.pack(fill=tk.X, pady=(5, 0))
         
-        self.btn_add_mapping = ttk.Button(map_btn_frame, text="➕ Add", command=self.add_mapping_ui, state="disabled")
+        self.btn_add_mapping = ttk.Button(map_btn_frame, text="➕ Add (Ctrl+D)", command=self.add_mapping_ui, state="disabled")
         self.btn_add_mapping.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         
-        self.btn_remove_mapping = ttk.Button(map_btn_frame, text="➖ Remove", command=self.remove_mapping_ui, state="disabled")
+        self.btn_remove_mapping = ttk.Button(map_btn_frame, text="➖ Remove (Ctrl+F)", command=self.remove_mapping_ui, state="disabled")
         self.btn_remove_mapping.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
 
         # Status Bar
@@ -1504,23 +1530,12 @@ class BFFNTApp:
             unicode_str = ", ".join([f"U+{ord(c):04X}" for c in chars]) if chars else ""
             widths = self.glyph_widths.get(glyph_idx, {"left": 0, "glyph": 0, "char": 0})
 
-            # Check matches
+            # Check matches (only search the Char column)
             match = False
             if not query:
                 match = True
-            elif query.startswith("u+") or query.startswith("0x"):
-                clean_query = query[2:]
-                for c in chars:
-                    if f"{ord(c):04x}".startswith(clean_query):
-                        match = True
-                        break
-            else:
-                if query in str(glyph_idx):
-                    match = True
-                elif query in char_str.lower():
-                    match = True
-                elif query in unicode_str.lower():
-                    match = True
+            elif query in char_str.lower():
+                match = True
 
             if match:
                 self.glyph_tree.insert("", tk.END, values=(
@@ -1646,7 +1661,7 @@ class BFFNTApp:
         self.preview_canvas.delete("all")
         self.preview_canvas.create_image(110, 110, image=self.preview_photo)
 
-    def apply_glyph_metrics(self):
+    def apply_glyph_metrics(self, event=None):
         if self.selected_glyph_index is None:
             return
         
@@ -1740,7 +1755,7 @@ class BFFNTApp:
 
         self.lbl_status.config(text="Applied metric changes to selected glyph.")
 
-    def open_pixel_editor(self):
+    def open_pixel_editor(self, event=None):
         if self.selected_glyph_index is None or not self.bffnt:
             return
         
@@ -1797,7 +1812,7 @@ class BFFNTApp:
         # Create editor window
         PixelEditorWindow(self, glyph_idx_to_edit, cell_width, cell_height, current_pixels, save_pixels_callback)
 
-    def export_glyph_png(self):
+    def export_glyph_png(self, event=None):
         if self.selected_glyph_index is None or not self.bffnt:
             return
         
@@ -1839,7 +1854,7 @@ class BFFNTApp:
         except Exception as e:
              messagebox.showerror("Export Failed", f"Failed to export glyph:\n{str(e)}")
 
-    def import_glyph_png(self):
+    def import_glyph_png(self, event=None):
         if self.selected_glyph_index is None or not self.bffnt:
             return
         
@@ -1895,7 +1910,7 @@ class BFFNTApp:
         for c in chars:
             self.mapping_listbox.insert(tk.END, f"'{c}' (U+{ord(c):04X})")
 
-    def add_mapping_ui(self):
+    def add_mapping_ui(self, event=None):
          if self.selected_glyph_index is None or not self.bffnt:
              return
          
@@ -1985,7 +2000,7 @@ class BFFNTApp:
          dialog.bind("<Return>", lambda e: on_confirm())
          dialog.bind("<Escape>", lambda e: dialog.destroy())
 
-    def remove_mapping_ui(self):
+    def remove_mapping_ui(self, event=None):
          if self.selected_glyph_index is None or not self.bffnt:
              return
          sel = self.mapping_listbox.curselection()
@@ -2013,7 +2028,7 @@ class BFFNTApp:
                  self.refresh_glyph_table()
                  self.lbl_status.config(text=f"Removed mapping for character U+{ord(char):04X}")
 
-    def export_sheet(self):
+    def export_sheet(self, event=None):
         if not self.bffnt:
             return
         idx = self.sheet_combo.current()
@@ -2032,7 +2047,7 @@ class BFFNTApp:
         except Exception as e:
             messagebox.showerror("Export Failed", f"Failed to export sheet:\n{str(e)}")
 
-    def import_sheet(self):
+    def import_sheet(self, event=None):
         if not self.bffnt:
             return
         idx = self.sheet_combo.current()
@@ -2062,7 +2077,7 @@ class BFFNTApp:
         except Exception as e:
             messagebox.showerror("Import Failed", f"Failed to import sheet:\n{str(e)}")
 
-    def add_new_sheet(self):
+    def add_new_sheet(self, event=None):
         if not self.bffnt:
             return
         
@@ -2097,7 +2112,7 @@ class BFFNTApp:
         self.lbl_status.config(text=f"Added new sheet. Sheet count is now {tglp['sheetCount']}.")
         messagebox.showinfo("Success", f"Added new texture sheet successfully! Added {added_glyphs} new blank glyphs.")
 
-    def remove_last_sheet(self):
+    def remove_last_sheet(self, event=None):
         if not self.bffnt:
             return
         
@@ -2170,7 +2185,7 @@ class BFFNTApp:
         messagebox.showinfo("Success", f"Removed the last texture sheet successfully! Cleared associated character slots.")
 
 
-    def on_open(self):
+    def on_open(self, event=None):
         if self.is_modified:
             ans = messagebox.askyesnocancel("Unsaved Changes", "You have unsaved changes. Save them before opening another file?")
             if ans is True:
@@ -2182,7 +2197,7 @@ class BFFNTApp:
         if path:
             self.load_bffnt_file(path)
 
-    def on_save(self):
+    def on_save(self, event=None):
         if not self.bffnt:
             return
         if not self.current_filepath:
@@ -2197,7 +2212,7 @@ class BFFNTApp:
         except Exception as e:
             messagebox.showerror("Save Failed", f"Failed to save BFFNT file:\n{str(e)}")
 
-    def on_save_as(self):
+    def on_save_as(self, event=None):
         if not self.bffnt:
             return
         path = filedialog.asksaveasfilename(defaultextension=".bffnt", filetypes=[("BFFNT Files", "*.bffnt")], initialfile=os.path.basename(self.current_filepath) if self.current_filepath else "")
