@@ -1113,7 +1113,7 @@ class PixelEditorWindow(tk.Toplevel):
 class BFFNTApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Antigravity BFFNT Font Editor")
+        self.root.title("Nintendo 3DS BFFNT Font Editor")
         self.root.geometry("1300x750")
         self.root.minsize(1200, 680)
 
