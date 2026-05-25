@@ -72,13 +72,9 @@ pip install Pillow
 ### Running the tool
 Run the script using python:
 ```bash
-python bffnt_editor_0.1.py
+python bffnt_editor.py
 ```
-
-You can also drag and drop a .bffnt file onto the script window, or pass it directly as a command-line argument:
-```bash
-python bffnt_editor_0.1.py "C:\path\to\your\file.bffnt"
-```
+You can also double click the .py file to open it.
 
 ## Tips and Info
 * **Adding Characters**: When mapping a new symbol like "Ç" or "ã", click Add (<kbd>Ctrl</kbd> + <kbd>D</kbd>) and input the letter directly or its Unicode format (like U+00C7).
